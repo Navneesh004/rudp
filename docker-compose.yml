@@ -1,0 +1,13 @@
+# Two containers on a private bridge network. NET_ADMIN lets each one change
+# its own network settings with `tc qdisc ... netem` (loss, delay).
+# bench/run.sh starts the receiver and sender programs with `docker compose exec`.
+services:
+  receiver:
+    build: { context: ., dockerfile: docker/Dockerfile }
+    cap_add: [NET_ADMIN]
+    command: sleep infinity
+  sender:
+    build: { context: ., dockerfile: docker/Dockerfile }
+    cap_add: [NET_ADMIN]
+    depends_on: [receiver]
+    command: sleep infinity
