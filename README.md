@@ -11,7 +11,35 @@ It covers the main parts of a transport layer: a three-way handshake, three reli
 
 ## Results
 
-All numbers below come from the deterministic network simulator in [`src/sim/`](src/sim). The same code runs over real UDP; only the link and clock are swapped. Anyone can reproduce them exactly with `npm run bench:sim -- --out results && python bench/plot.py`.
+### RUDP vs Linux TCP under real packet loss
+
+Measured by the [Benchmark](.github/workflows/benchmark.yml) workflow on a GitHub-hosted runner ([`results/environment.txt`](results/environment.txt)). Two Docker containers; `tc netem` adds loss and 50 ms delay to the sender's interface. The file is 10 MB, each point is the mean of 3 runs, and every transfer's SHA-256 was checked ([`results/results.csv`](results/results.csv)).
+
+![Throughput vs packet loss](results/throughput.png)
+
+| Loss | RUDP (selective repeat) | TCP (Linux kernel) | RUDP / TCP | RUDP retransmissions |
+| ---: | ---: | ---: | ---: | ---: |
+| 0% | 7.63 MB/s | 18.76 MB/s | 41% | 0 |
+| 1% | 0.31 MB/s | 1.79 MB/s | 17% | 91 |
+| 2% | 0.20 MB/s | 0.34 MB/s | 58% | 252 |
+| 5% | 0.11 MB/s | 0.16 MB/s | 73% | 593 |
+| 10% | 0.07 MB/s | 0.10 MB/s | 74% | 1155 |
+
+- **At 5% loss, RUDP reached 0.114 MB/s versus 0.156 MB/s for Linux TCP (73%).**
+- At 10% loss, every 10 MB transfer completed with a matching SHA-256 hash.
+- Linux TCP is faster at every loss rate. The likely reasons, which I haven't measured separately:
+  - **0% loss:** RUDP caps its window at 512 segments of 1,200 bytes (about 614 KB). At a 50 ms RTT that limits it to about 12 MB/s. It also starts from cwnd = 1, while Linux starts at 10 with 1,448-byte segments, and it runs in user-space JavaScript.
+  - **Under loss:** Linux uses CUBIC rather than NewReno, detects lost retransmissions without waiting for a timeout (RACK), and paces its sends.
+  - The gap narrows as loss rises: RUDP reaches 73–74% of TCP at 5–10% loss.
+- The real RUDP numbers match the simulator closely. At 1% loss it measured 0.313 MB/s against 0.325 MB/s simulated, and at 10% loss 0.070 against 0.077.
+
+![Congestion window over time](results/cwnd.png)
+
+RUDP's congestion window during the 1% loss run: slow start, then the NewReno sawtooth. Each loss halves cwnd and sets ssthresh, and cwnd then grows by about one segment per round trip.
+
+### Stop-and-wait vs Go-Back-N vs selective repeat (simulated)
+
+From the deterministic network simulator in [`src/sim/`](src/sim). The protocol code is the same; only the link and clock are swapped. Reproduce exactly with `npm run bench:sim -- --out results && python bench/plot.py` (1 MiB, 50 ms RTT, loss on the data path, seed 3; "rtx" = retransmitted segments).
 
 ![Simulated throughput vs packet loss](results/sim_throughput.png)
 
@@ -23,13 +51,11 @@ All numbers below come from the deterministic network simulator in [`src/sim/`](
 | 5% | 0.021 MB/s · 34 rtx | 0.081 MB/s · 217 rtx | 0.122 MB/s · 51 rtx |
 | 10% | 0.017 MB/s · 93 rtx | 0.027 MB/s · 366 rtx | 0.077 MB/s · 107 rtx |
 
-With a window of segments in flight, Go-Back-N is ~75× faster than stop-and-wait on a clean link. At 10% loss, selective repeat is ~3× faster than Go-Back-N and sends ~3.4× fewer retransmissions. The selective-repeat column follows the Mathis et al. model for Reno-family AIMD, throughput ≈ (MSS/RTT)·(1.22/√p): at 1% loss that predicts 0.29 MB/s, and the simulator measures 0.33 MB/s. (1 MiB transfer, 50 ms RTT, loss on the data path, seed 3; "rtx" = retransmitted segments.)
+With a window of segments in flight, Go-Back-N is ~75× faster than stop-and-wait on a clean link. At 10% loss, selective repeat is ~3× faster than Go-Back-N and sends ~3.4× fewer retransmissions. The selective-repeat column follows the Mathis et al. model for Reno-family AIMD, throughput ≈ (MSS/RTT)·(1.22/√p): at 1% loss that predicts 0.29 MB/s, and the simulator measures 0.33 MB/s.
 
 ![Simulated congestion window over time](results/sim_cwnd.png)
 
-The trace above is a selective-repeat transfer through a simulated 1 MB/s bottleneck with a 60-packet queue. Slow start doubles cwnd each round trip until the queue overflows. NewReno then halves it once for the whole burst of losses. A retransmission that is lost again forces a timeout and a return to slow start, and the sender then settles into additive increase above the new ssthresh.
-
-**On real networks:** a 10 MB transfer over a real UDP socket on localhost arrives with a matching SHA-256 hash. CI also runs a 1 MB transfer between two Docker containers at 5% `tc netem` loss. The RUDP vs kernel-TCP comparison under `tc netem` loss (`bash bench/run.sh`) runs in the [Benchmark](.github/workflows/benchmark.yml) workflow on a GitHub-hosted runner, which commits its results to [`results/`](results).
+A selective-repeat transfer through a simulated 1 MB/s bottleneck with a 60-packet queue. Slow start doubles cwnd each round trip until the queue overflows. NewReno then halves it once for the whole burst of losses. A retransmission that is lost again forces a timeout and a return to slow start, and the sender then settles into additive increase above the new ssthresh.
 
 ## Architecture
 
@@ -160,7 +186,8 @@ CI runs the suite on Node 22 and 24 on every push. A separate workflow builds th
 - **No RACK or timestamps.** A retransmission that is lost again is only detected by timeout, which makes very high loss (≥ 20%) slow. Timestamps would also allow RTT samples from retransmitted segments.
 - **No pacing.** cwnd worth of segments go out in a burst. Pacing them over the RTT would reduce bottleneck queue overflows.
 - **Window in segments.** The 16-bit window counts segments rather than bytes, which avoids needing window scaling but assumes full-sized segments.
-- **Next steps:** CUBIC or BBR congestion control, path MTU discovery, delayed ACKs, connection migration.
+- **Slower than kernel TCP.** RUDP reaches 41% of Linux TCP's throughput on a clean 50 ms link and 73% at 5% loss. The likely causes are the 512-segment window cap, an initial window of 1, smaller segments, NewReno instead of CUBIC, and no RACK.
+- **Next steps:** an initial window of 10 and a larger window cap, CUBIC or BBR congestion control, path MTU discovery, delayed ACKs, connection migration.
 
 ## References
 
