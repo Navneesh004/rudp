@@ -5,7 +5,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A TCP-like reliable transport protocol built on UDP in TypeScript, with selective repeat, RFC 6298 timeouts and Reno congestion control.
+A TCP-like reliable transport protocol built on UDP in TypeScript, with selective repeat, RFC 6298 timeouts and NewReno congestion control.
 
 It covers the main parts of a transport layer: a three-way handshake, three reliability strategies (stop-and-wait, Go-Back-N, selective repeat with SACK), adaptive retransmission timeouts, flow control, NewReno congestion control and a FIN/ACK teardown. A deterministic network simulator tests it at up to 30% packet loss, and a Docker + `tc netem` setup benchmarks it against the Linux kernel's TCP.
 
@@ -31,7 +31,7 @@ It covers the main parts of a transport layer: a three-way handshake, three reli
 | 5% | 0.021 MB/s · 34 rtx | 0.081 MB/s · 217 rtx | 0.122 MB/s · 51 rtx |
 | 10% | 0.017 MB/s · 93 rtx | 0.027 MB/s · 366 rtx | 0.077 MB/s · 107 rtx |
 
-With a window of segments in flight, Go-Back-N is ~75× faster than stop-and-wait on a clean link. At 10% loss, selective repeat is ~3× faster than Go-Back-N and sends ~3.4× fewer retransmissions. The selective-repeat column follows the Mathis et al. model for Reno, throughput ≈ (MSS/RTT)·(1.22/√p): at 1% loss that predicts 0.29 MB/s, and the simulator measures 0.33 MB/s.
+With a window of segments in flight, Go-Back-N is ~75× faster than stop-and-wait on a clean link. At 10% loss, selective repeat is ~3× faster than Go-Back-N and sends ~3.4× fewer retransmissions. The selective-repeat column follows the Mathis et al. model for Reno-family AIMD, throughput ≈ (MSS/RTT)·(1.22/√p): at 1% loss that predicts 0.29 MB/s, and the simulator measures 0.33 MB/s.
 
 ## Architecture
 
@@ -45,7 +45,7 @@ flowchart LR
         SW["SendWindow<br/>scoreboard + SACK<br/>window.ts"]
         RW["ReceiveWindow<br/>reassembly buffer<br/>window.ts"]
         RTT["RttEstimator<br/>RFC 6298<br/>rtt.ts"]
-        CC["Reno / NewReno<br/>congestion.ts"]
+        CC["NewReno<br/>congestion.ts"]
     end
 
     Conn -->|"encode / decode"| PKT["Packet codec + CRC32<br/>packet.ts"]
@@ -98,10 +98,11 @@ server:  CLOSED → LISTEN → SYN_RECEIVED → ESTABLISHED → CLOSE_WAIT → L
 
 **Retransmission timeout (RFC 6298).** Every ACK for a segment that was never retransmitted gives an RTT sample R, which updates `SRTT ← ⅞·SRTT + ⅛·R` and `RTTVAR ← ¾·RTTVAR + ¼·|SRTT − R|`. The timeout is `RTO = max(200 ms, SRTT + 4·RTTVAR)`. Karn's rule skips samples from retransmitted segments, because their ACK could belong to either transmission. Each timeout doubles the RTO, up to 60 s. One deviation from the RFC, borrowed from Linux: the backoff is cleared on any ACK that makes forward progress. Without this, under heavy loss Karn's rule leaves no clean samples and the RTO stays inflated. In the simulator this made 1 MB at 30% loss complete 6.5× sooner.
 
-**Congestion control (Reno/NewReno).** The congestion window starts at 1 segment and grows by 1 for each ACKed segment (slow start, doubling every RTT) until it reaches `ssthresh`. Above that it grows by 1/cwnd per ACK, about +1 segment per RTT. The sender keeps `min(cwnd, receiver window)` segments in flight.
+**Congestion control (NewReno).** Window growth and backoff follow Reno (RFC 5681); fast recovery follows NewReno (RFC 6582). The congestion window starts at 1 segment and grows by 1 for each ACKed segment (slow start, doubling every RTT) until it reaches `ssthresh`. Above that it grows by 1/cwnd per ACK, about +1 segment per RTT. The sender keeps `min(cwnd, receiver window)` segments in flight.
 
-- **On 3 duplicate ACKs:** the sender resends the missing segment immediately (fast retransmit), sets `ssthresh = flight/2` and halves cwnd. It then stays in fast recovery until everything outstanding at the loss is ACKed, so several losses in one window only halve cwnd once. A partial ACK during recovery means another hole, which is resent right away (NewReno).
+- **On 3 duplicate ACKs:** the sender resends the missing segment immediately (fast retransmit), sets `ssthresh = flight/2` and halves cwnd. It then stays in fast recovery until everything outstanding at the loss is ACKed. This is the NewReno change: plain Reno leaves recovery on the first new ACK, so several losses in one window halve cwnd several times. In selective-repeat mode, a partial ACK during recovery means another hole, which is resent right away.
 - **On a timeout:** `ssthresh = flight/2`, cwnd drops to 1 and slow start begins again.
+- **Differences from textbook NewReno:** there is no "window inflation" (adding 3, then 1 per duplicate ACK). Instead the sender counts segments in flight from its SACK scoreboard, excluding SACKed and presumed-lost ones (the RFC 6675 "pipe"). In Go-Back-N mode, partial ACKs don't trigger a retransmission; the sender relies on its fast retransmit of the whole window and on timeouts.
 
 **Flow control.** The receiver advertises its free buffer space in segments. If the application pauses (for example, `rudp-recv` when the disk is slower than the network), delivered data is held back and the window shrinks to zero. While the window is zero the sender sends window probes on a persist timer, so a lost window update cannot deadlock the connection.
 

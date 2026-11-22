@@ -14,7 +14,7 @@
 import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { realClock, type Clock, type TimerHandle } from "./clock.js";
-import { FixedWindow, Reno, type CongestionControl } from "./congestion.js";
+import { FixedWindow, NewReno, type CongestionControl } from "./congestion.js";
 import type { Link } from "./link.js";
 import {
   ACK,
@@ -741,7 +741,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private makeCongestionControl(): CongestionControl {
     if (this.modeValue === "saw") return new FixedWindow(1);
     if (this.ccKind === "none") return new FixedWindow(this.maxWindow);
-    return new Reno({ maxCwnd: this.maxWindow });
+    return new NewReno({ maxCwnd: this.maxWindow });
   }
 
   private emitCwnd(): void {

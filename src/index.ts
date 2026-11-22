@@ -7,7 +7,7 @@ export { realClock, type Clock } from "./clock.js";
 export * from "./packet.js";
 export { StateMachine, IllegalTransitionError, TRANSITIONS, type State } from "./state.js";
 export { RttEstimator, type RttOptions } from "./rtt.js";
-export { Reno, FixedWindow, type CongestionControl } from "./congestion.js";
+export { NewReno, FixedWindow, type CongestionControl } from "./congestion.js";
 export { SendWindow, ReceiveWindow, MODE_NAMES } from "./window.js";
 export { SimClock } from "./sim/clock.js";
 export { createLinkPair, type LinkConditions } from "./sim/link.js";

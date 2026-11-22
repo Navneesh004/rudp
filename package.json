@@ -1,7 +1,7 @@
 {
   "name": "rudp",
   "version": "1.0.0",
-  "description": "A TCP-like reliable transport protocol built on UDP in TypeScript, with selective repeat, RFC 6298 timeouts and Reno congestion control.",
+  "description": "A TCP-like reliable transport protocol built on UDP in TypeScript, with selective repeat, RFC 6298 timeouts and NewReno congestion control.",
   "type": "module",
   "license": "MIT",
   "engines": {

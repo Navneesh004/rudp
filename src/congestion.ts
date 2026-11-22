@@ -1,5 +1,6 @@
 /**
- * Congestion control, TCP Reno/NewReno style (RFC 5681, RFC 6582). The
+ * Congestion control: TCP NewReno. Window growth and backoff are standard Reno
+ * (RFC 5681); fast recovery uses the NewReno exit rule (RFC 6582). The
  * congestion window (cwnd) is counted in segments.
  *
  *   slow start           cwnd < ssthresh: +1 per ACKed segment (doubles every RTT)
@@ -7,8 +8,12 @@
  *   3 duplicate ACKs     ssthresh = flight/2, cwnd = ssthresh (halve), enter fast recovery
  *   timeout              ssthresh = flight/2, cwnd = 1, back to slow start
  *
- * Fast recovery lasts until everything that was outstanding when the loss was
- * detected has been acknowledged, so a burst of losses only halves cwnd once.
+ * NewReno vs Reno: Reno leaves fast recovery on the first new ACK, so several
+ * losses in one window halve cwnd several times. Here fast recovery lasts until
+ * everything outstanding when the loss was detected has been acknowledged, so
+ * a burst of losses only halves cwnd once. Partial ACKs (retransmitting the next
+ * hole) are handled in Connection, which also replaces Reno's "window inflation"
+ * with the SACK scoreboard's in-flight count (RFC 6675 "pipe").
  */
 export interface CongestionControl {
   readonly cwnd: number;
@@ -21,20 +26,20 @@ export interface CongestionControl {
   onTimeout(flight: number): void;
 }
 
-export interface RenoOptions {
+export interface NewRenoOptions {
   initialCwnd?: number;
   initialSsthresh?: number;
   /** Upper bound on cwnd; there is no point growing past the receiver's buffer. */
   maxCwnd?: number;
 }
 
-export class Reno implements CongestionControl {
+export class NewReno implements CongestionControl {
   private cwndSegs: number;
   private ssthreshSegs: number;
   private recovering = false;
   private readonly maxCwnd: number;
 
-  constructor(opts: RenoOptions = {}) {
+  constructor(opts: NewRenoOptions = {}) {
     this.cwndSegs = opts.initialCwnd ?? 1;
     this.maxCwnd = opts.maxCwnd ?? 1024;
     this.ssthreshSegs = opts.initialSsthresh ?? this.maxCwnd;
