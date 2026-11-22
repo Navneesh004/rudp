@@ -1,0 +1,5 @@
+runner: GitHub Actions ubuntu-latest (7.0.0-1020-azure, 4 vCPU)
+date: 2026-11-22T23:17Z
+commit: 714e67c
+losses: 0 1 2 5 10
+runs: 3, delay: 50 ms, file: 10 MB, mode: sr
