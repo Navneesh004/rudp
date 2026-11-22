@@ -1,0 +1,28 @@
+name: Docker netem smoke test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build benchmark image
+        run: docker compose build
+      - name: Smoke test a 1 MB transfer at 5% loss between containers
+        run: |
+          docker compose up -d
+          docker compose exec -T sender sh -c "head -c 1M /dev/urandom > /tmp/test.bin"
+          docker compose exec -T sender tc qdisc add dev eth0 root netem loss 5% delay 20ms
+          docker compose exec -T -d receiver sh -c "node dist/src/cli/recv.js 9000 /tmp/out.bin"
+          sleep 1
+          docker compose exec -T sender node dist/src/cli/send.js receiver 9000 /tmp/test.bin
+          sleep 2
+          test "$(docker compose exec -T sender sha256sum /tmp/test.bin | cut -d' ' -f1)" = \
+               "$(docker compose exec -T receiver sha256sum /tmp/out.bin | cut -d' ' -f1)"
+      - if: always()
+        run: docker compose down

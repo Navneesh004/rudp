@@ -3,7 +3,9 @@
 ## 1. Capture a trace in the benchmark containers
 
 ```bash
-KEEP=1 LOSSES="5" RUNS=1 bash bench/run.sh        # leaves containers running with 5% loss
+docker compose up -d --build
+docker compose exec sender sh -c "head -c 2M /dev/urandom > /tmp/test.bin"
+docker compose exec sender tc qdisc add dev eth0 root netem loss 5% delay 50ms
 docker compose exec -d sender tcpdump -i eth0 -w /tmp/trace.pcap udp port 9000
 docker compose exec -d receiver sh -c "node dist/src/cli/recv.js 9000 /tmp/out.bin"
 docker compose exec sender node dist/src/cli/send.js receiver 9000 /tmp/test.bin
