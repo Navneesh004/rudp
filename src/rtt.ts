@@ -58,6 +58,16 @@ export class RttEstimator {
     this.rtoMs = this.clamp(this.rtoMs * 2);
   }
 
+  /**
+   * Undo backoff once an ACK shows the path is delivering again. Under Karn's
+   * rule there may be no fresh sample to do it, which at high loss leaves the
+   * RTO stuck at its backed-off value; Linux resets it the same way.
+   */
+  resetBackoff(): void {
+    if (this.srttMs === undefined) return;
+    this.rtoMs = this.clamp(this.srttMs + Math.max(this.granularity, K * this.rttvarMs));
+  }
+
   get rto(): number {
     return this.rtoMs;
   }

@@ -51,6 +51,17 @@ describe("RTT estimator (RFC 6298)", () => {
     expect(r.rto).toBeLessThan(400);
   });
 
+  it("resetBackoff restores the RTO computed from SRTT", () => {
+    const r = new RttEstimator({ minRto: 0 });
+    r.resetBackoff(); // no sample yet: no-op
+    expect(r.rto).toBe(1000);
+    r.sample(100);
+    r.backoff();
+    r.backoff();
+    r.resetBackoff();
+    expect(r.rto).toBe(300);
+  });
+
   it("ignores invalid samples", () => {
     const r = new RttEstimator();
     r.sample(-5);
