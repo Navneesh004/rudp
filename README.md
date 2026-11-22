@@ -1,6 +1,6 @@
 # RUDP: reliable transport over UDP
 
-[![CI](https://github.com/<your-username>/rudp/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/rudp/actions/workflows/ci.yml)
+[![CI](https://github.com/Navneesh004/rudp/actions/workflows/ci.yml/badge.svg)](https://github.com/Navneesh004/rudp/actions/workflows/ci.yml)
 ![Node 22+](https://img.shields.io/badge/node-%E2%89%A522.2-339933)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
