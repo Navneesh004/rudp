@@ -23,7 +23,8 @@
     "test:watch": "vitest",
     "send": "tsx src/cli/send.ts",
     "recv": "tsx src/cli/recv.ts",
-    "tcp": "tsx baseline/tcp.ts"
+    "tcp": "tsx baseline/tcp.ts",
+    "bench:sim": "tsx bench/simulate.ts"
   },
   "keywords": [
     "networking",
