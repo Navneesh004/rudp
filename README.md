@@ -138,11 +138,7 @@ python bench/plot.py                            # results/throughput.png, result
 
 **Simulator only:** `npm run bench:sim` prints the stop-and-wait / Go-Back-N / selective-repeat table above.
 
-**Packet captures:** see [docs/wireshark.md](docs/wireshark.md). [`docs/rudp.lua`](docs/rudp.lua) is a Wireshark dissector that decodes the RUDP header, flags and SACK blocks.
-
-| Three-way handshake | Loss and selective retransmission |
-| --- | --- |
-| ![handshake](docs/handshake.png) | ![retransmission](docs/retransmission.png) |
+**Packet captures:** see [docs/wireshark.md](docs/wireshark.md). [`docs/rudp.lua`](docs/rudp.lua) is a Wireshark dissector that decodes the RUDP header, flags and SACK blocks, so a capture shows the handshake, SACK ranges and selective retransmissions by name.
 
 ## Testing
 
@@ -157,7 +153,7 @@ npm run typecheck
 - **End-to-end (simulated link):** 1 MB arrives with a matching SHA-256 at 0%, 10% and 30% loss with selective repeat and at 10% with stop-and-wait and Go-Back-N, under combined reordering, duplication and corruption, across sequence-number wraparound, and in both directions at once. Handshake packets can be lost. A dead path ends in a timeout error. A paused receiver never has more than its advertised window in flight. Selective repeat beats Go-Back-N, fast retransmit fires, and cwnd shows a sawtooth at a bottleneck.
 - **Real UDP:** 2 MB over a localhost socket in SR and GBN mode, and `connect()` failing cleanly when nobody is listening.
 
-CI runs the suite on Node 22 and 24 on every push. A separate workflow builds the Docker image and runs a 1 MB transfer at 5% netem loss between containers.
+CI runs the suite on Node 22 and 24 on every push. A separate workflow builds the Docker image and runs a 1 MB transfer at 5% netem loss between containers. The [Benchmark](.github/workflows/benchmark.yml) workflow runs the full `bench/run.sh` comparison on a GitHub-hosted runner and commits the results to [`results/`](results).
 
 ## Limitations and next steps
 

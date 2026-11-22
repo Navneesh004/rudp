@@ -1,0 +1,76 @@
+name: Benchmark
+
+# Runs bench/run.sh (RUDP vs Linux TCP under tc netem loss) on a GitHub-hosted
+# Ubuntu runner, draws the charts and commits results/ back to the repo, so the
+# numbers in the README come from a run anyone can reproduce.
+#
+# Trigger it from the Actions tab (Run workflow). It also runs when this file changes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      losses:
+        description: Loss rates in percent
+        default: "0 1 2 5 10"
+      runs:
+        description: Runs per protocol per loss rate
+        default: "3"
+  push:
+    branches: [main]
+    paths: [.github/workflows/benchmark.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: benchmark
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run benchmark
+        env:
+          LOSSES: ${{ github.event.inputs.losses || '0 1 2 5 10' }}
+          RUNS: ${{ github.event.inputs.runs || '3' }}
+          DELAY_MS: "50"
+          SIZE_MB: "10"
+          MODE: sr
+        run: bash bench/run.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Draw charts
+        run: |
+          pip install -r bench/requirements.txt
+          python bench/plot.py
+
+      - name: Record environment
+        run: |
+          {
+            echo "runner: GitHub Actions ubuntu-latest ($(uname -r), $(nproc) vCPU)"
+            echo "date: $(date -u +%Y-%m-%dT%H:%MZ)"
+            echo "commit: ${GITHUB_SHA::7}"
+            echo "losses: ${{ github.event.inputs.losses || '0 1 2 5 10' }}"
+            echo "runs: ${{ github.event.inputs.runs || '3' }}, delay: 50 ms, file: 10 MB, mode: sr"
+          } > results/environment.txt
+          cat results/results.csv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: results/
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results
+          git commit -m "Benchmark results from GitHub Actions" || { echo "no changes"; exit 0; }
+          git push
