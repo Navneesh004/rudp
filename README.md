@@ -11,17 +11,9 @@ It covers the main parts of a transport layer: a three-way handshake, three reli
 
 ## Results
 
-<!-- After running `bash bench/run.sh` and `python bench/plot.py`, replace X/Y below with your numbers. -->
+All numbers below come from the deterministic network simulator in [`src/sim/`](src/sim). The same code runs over real UDP; only the link and clock are swapped. Anyone can reproduce them exactly with `npm run bench:sim -- --out results && python bench/plot.py`.
 
-![Throughput vs packet loss](results/throughput.png)
-
-- At **5% loss**, RUDP reached **X MB/s** versus **Y MB/s** for TCP (50 ms delay, 10 MB file, average of 3 runs).
-- At **10% loss**, a 10 MB transfer completes with matching SHA-256 hashes.
-- Selective repeat resends only the missing segments, so it retransmits far less than Go-Back-N under loss (table below).
-
-![Congestion window over time](results/cwnd.png)
-
-**Simulator comparison** (`npm run bench:sim`: 1 MiB, 50 ms RTT, deterministic, seed 3):
+![Simulated throughput vs packet loss](results/sim_throughput.png)
 
 | Loss | Stop-and-wait | Go-Back-N | Selective repeat |
 | ---: | ---: | ---: | ---: |
@@ -31,7 +23,13 @@ It covers the main parts of a transport layer: a three-way handshake, three reli
 | 5% | 0.021 MB/s · 34 rtx | 0.081 MB/s · 217 rtx | 0.122 MB/s · 51 rtx |
 | 10% | 0.017 MB/s · 93 rtx | 0.027 MB/s · 366 rtx | 0.077 MB/s · 107 rtx |
 
-With a window of segments in flight, Go-Back-N is ~75× faster than stop-and-wait on a clean link. At 10% loss, selective repeat is ~3× faster than Go-Back-N and sends ~3.4× fewer retransmissions. The selective-repeat column follows the Mathis et al. model for Reno-family AIMD, throughput ≈ (MSS/RTT)·(1.22/√p): at 1% loss that predicts 0.29 MB/s, and the simulator measures 0.33 MB/s.
+With a window of segments in flight, Go-Back-N is ~75× faster than stop-and-wait on a clean link. At 10% loss, selective repeat is ~3× faster than Go-Back-N and sends ~3.4× fewer retransmissions. The selective-repeat column follows the Mathis et al. model for Reno-family AIMD, throughput ≈ (MSS/RTT)·(1.22/√p): at 1% loss that predicts 0.29 MB/s, and the simulator measures 0.33 MB/s. (1 MiB transfer, 50 ms RTT, loss on the data path, seed 3; "rtx" = retransmitted segments.)
+
+![Simulated congestion window over time](results/sim_cwnd.png)
+
+The trace above is a selective-repeat transfer through a simulated 1 MB/s bottleneck with a 60-packet queue. Slow start doubles cwnd each round trip until the queue overflows. NewReno then halves it once for the whole burst of losses. A retransmission that is lost again forces a timeout and a return to slow start, and the sender then settles into additive increase above the new ssthresh.
+
+**On real networks:** a 10 MB transfer over a real UDP socket on localhost arrives with a matching SHA-256 hash. CI also runs a 1 MB transfer between two Docker containers at 5% `tc netem` loss. The RUDP vs kernel-TCP comparison under `tc netem` loss (`bash bench/run.sh`) runs in the [Benchmark](.github/workflows/benchmark.yml) workflow on a GitHub-hosted runner, which commits its results to [`results/`](results).
 
 ## Architecture
 
