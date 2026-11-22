@@ -1,0 +1,43 @@
+{
+  "name": "rudp",
+  "version": "1.0.0",
+  "description": "A TCP-like reliable transport protocol built on UDP in TypeScript, with selective repeat, RFC 6298 timeouts and Reno congestion control.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.2"
+  },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "rudp-send": "dist/src/cli/send.js",
+    "rudp-recv": "dist/src/cli/recv.js"
+  },
+  "files": [
+    "dist/src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "send": "tsx src/cli/send.ts",
+    "recv": "tsx src/cli/recv.ts",
+    "tcp": "tsx baseline/tcp.ts"
+  },
+  "keywords": [
+    "networking",
+    "tcp",
+    "udp",
+    "transport-protocol",
+    "typescript",
+    "selective-repeat",
+    "congestion-control"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}

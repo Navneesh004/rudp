@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.pcap
+*.pcapng
+*.bin
+results/*.tmp
+.DS_Store
+__pycache__/
+.venv/
